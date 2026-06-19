@@ -4312,20 +4312,37 @@ function Clash订阅配置文件热补丁(Clash_原始订阅内容, config_JSON 
 		const 主策略组名 = yaml.match(/proxy-groups:\s*\n\s*-\s*name:\s*([^\n]+)/)?.[1]?.replace(/^['"]|['"]$/g, '').trim() || '🚀 节点选择';
 		const 转义正则 = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 		const 清理名称 = value => value.replace(/^['"]|['"]$/g, '').trim();
-		const 是待移除代理项 = line => {
+		const 真实节点名列表 = (() => {
+			const names = [];
+			let inProxies = false;
+			for (const line of yaml.split('\n')) {
+				if (/^proxies:\s*(?:#.*)?$/.test(line)) {
+					inProxies = true;
+					continue;
+				}
+				if (inProxies && /^[A-Za-z][\w-]*:\s*/.test(line)) break;
+				if (!inProxies) continue;
+				const match = line.match(/^\s*-\s*(?:\{\s*)?name:\s*(.+?)(?:\s*[,}]|\s*$)/);
+				if (!match) continue;
+				const name = 清理名称(match[1]);
+				if (name && !names.includes(name)) names.push(name);
+			}
+			return names;
+		})();
+		const 是待移除代理项 = (line, groupName) => {
 			const match = line.match(/^(\s*-\s*)(.+?)(\s*(?:#.*)?)$/);
 			if (!match) return false;
 			const value = 清理名称(match[2]);
-			return value === 'DIRECT' || value === 'REJECT' || 移除策略组名.has(value);
+			return value === 'DIRECT' || value === 'REJECT' || 移除策略组名.has(value) || (groupName !== 主策略组名 && value === 主策略组名);
 		};
 		const 补空代理组 = (block, groupName) => {
 			const proxiesIndex = block.findIndex(line => /^\s*proxies:\s*(?:#.*)?$/.test(line));
 			if (proxiesIndex === -1) return block;
 			const hasProxyItem = block.some((line, idx) => idx > proxiesIndex && /^\s{4,}-\s+\S/.test(line));
 			if (hasProxyItem) return block;
-			const fallback = groupName === 主策略组名 ? '♻️ 自动选择' : 主策略组名;
 			const indent = block[proxiesIndex].match(/^(\s*)/)?.[1] || '    ';
-			block.splice(proxiesIndex + 1, 0, `${indent}  - ${fallback}`);
+			const fallbackItems = 真实节点名列表.length ? 真实节点名列表 : ['♻️ 自动选择'];
+			block.splice(proxiesIndex + 1, 0, ...fallbackItems.map(name => `${indent}  - ${name}`));
 			return block;
 		};
 		const lines = yaml.split('\n');
@@ -4336,7 +4353,7 @@ function Clash订阅配置文件热补丁(Clash_原始订阅内容, config_JSON 
 			if (!groupBlock.length) return;
 			const groupName = 清理名称(groupBlock[0].match(/^\s*-\s*name:\s*(.+?)\s*$/)?.[1] || '');
 			if (!移除策略组名.has(groupName)) {
-				const cleanedBlock = 补空代理组(groupBlock.filter(line => !是待移除代理项(line)), groupName);
+				const cleanedBlock = 补空代理组(groupBlock.filter(line => !是待移除代理项(line, groupName)), groupName);
 				output.push(...cleanedBlock);
 			}
 			groupBlock = [];
