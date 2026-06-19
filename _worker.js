@@ -4366,7 +4366,7 @@ function Clash订阅配置文件热补丁(Clash_原始订阅内容, config_JSON 
 		}
 		flushGroup();
 		let cleaned = output.join('\n');
-		for (const groupName of 移除策略组名) cleaned = cleaned.replace(new RegExp(`(,\\s*)${转义正则(groupName)}(?=\\s*(?:,|$))`, 'g'), `$1${主策略组名}`);
+		for (const groupName of 移除策略组名) cleaned = cleaned.replace(new RegExp(`(,\\s*)${转义正则(groupName)}(?=\\s*(?:,|\\n|$))`, 'g'), `$1${主策略组名}`);
 		return cleaned;
 	};
 
