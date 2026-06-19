@@ -4307,8 +4307,71 @@ function Clash订阅配置文件热补丁(Clash_原始订阅内容, config_JSON 
 		nodeLines.splice(insertIndex + 1, 0, ...echOptsLines);
 		return nodeLines;
 	};
+	const 清理策略组直连拦截 = (yaml) => {
+		const 移除策略组名 = new Set(['🎯 全球直连', '🛑 广告拦截', '🍃 应用净化']);
+		const 主策略组名 = yaml.match(/proxy-groups:\s*\n\s*-\s*name:\s*([^\n]+)/)?.[1]?.replace(/^['"]|['"]$/g, '').trim() || '🚀 节点选择';
+		const 转义正则 = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		const 清理名称 = value => value.replace(/^['"]|['"]$/g, '').trim();
+		const 是待移除代理项 = line => {
+			const match = line.match(/^(\s*-\s*)(.+?)(\s*(?:#.*)?)$/);
+			if (!match) return false;
+			const value = 清理名称(match[2]);
+			return value === 'DIRECT' || value === 'REJECT' || 移除策略组名.has(value);
+		};
+		const 补空代理组 = (block, groupName) => {
+			const proxiesIndex = block.findIndex(line => /^\s*proxies:\s*(?:#.*)?$/.test(line));
+			if (proxiesIndex === -1) return block;
+			const hasProxyItem = block.some((line, idx) => idx > proxiesIndex && /^\s{4,}-\s+\S/.test(line));
+			if (hasProxyItem) return block;
+			const fallback = groupName === 主策略组名 ? '♻️ 自动选择' : 主策略组名;
+			const indent = block[proxiesIndex].match(/^(\s*)/)?.[1] || '    ';
+			block.splice(proxiesIndex + 1, 0, `${indent}  - ${fallback}`);
+			return block;
+		};
+		const lines = yaml.split('\n');
+		const output = [];
+		let inProxyGroups = false;
+		let groupBlock = [];
+		const flushGroup = () => {
+			if (!groupBlock.length) return;
+			const groupName = 清理名称(groupBlock[0].match(/^\s*-\s*name:\s*(.+?)\s*$/)?.[1] || '');
+			if (!移除策略组名.has(groupName)) {
+				const cleanedBlock = 补空代理组(groupBlock.filter(line => !是待移除代理项(line)), groupName);
+				output.push(...cleanedBlock);
+			}
+			groupBlock = [];
+		};
+		for (const line of lines) {
+			if (/^proxy-groups:\s*(?:#.*)?$/.test(line)) {
+				inProxyGroups = true;
+				output.push(line);
+				continue;
+			}
+			if (inProxyGroups && /^[A-Za-z][\w-]*:\s*/.test(line)) {
+				flushGroup();
+				inProxyGroups = false;
+				output.push(line);
+				continue;
+			}
+			if (inProxyGroups && /^\s*-\s*name:\s*/.test(line)) {
+				flushGroup();
+				groupBlock.push(line);
+				continue;
+			}
+			if (inProxyGroups) {
+				groupBlock.push(line);
+				continue;
+			}
+			output.push(line);
+		}
+		flushGroup();
+		let cleaned = output.join('\n');
+		for (const groupName of 移除策略组名) cleaned = cleaned.replace(new RegExp(`(,\\s*)${转义正则(groupName)}(?=\\s*(?:,|$))`, 'g'), `$1${主策略组名}`);
+		return cleaned;
+	};
 
 	if (!/^dns:\s*(?:\n|$)/m.test(clash_yaml)) clash_yaml = baseDnsBlock + clash_yaml;
+	clash_yaml = 清理策略组直连拦截(clash_yaml);
 	if (ECH_SNI && !HOSTS.includes(ECH_SNI)) HOSTS.push(ECH_SNI);
 
 	if (ECH启用 && HOSTS.length > 0) {
