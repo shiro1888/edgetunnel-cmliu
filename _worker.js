@@ -298,10 +298,19 @@ export default {
 					const 响应 = new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
 					响应.headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; HttpOnly');
 					return 响应;
+				} else if (访问路径.startsWith('clash/')) {//兼容 /clash/:token 形式的订阅链接
+					const 路径订阅TOKEN = url.pathname.split('/').filter(Boolean)[1];
+					if (路径订阅TOKEN) {
+						const params = new URLSearchParams(url.search);
+						params.set('token', 路径订阅TOKEN);
+						params.set('clash', '');
+						return new Response('重定向中...', { status: 302, headers: { 'Location': `/sub?${params.toString()}` } });
+					}
 				} else if (访问路径 === 'sub') {//处理订阅请求
 					const 订阅TOKEN = await MD5MD5(host + userID), 作为优选订阅生成器 = ['1', 'true'].includes(env.BEST_SUB) && url.searchParams.get('host') === 'example.com' && url.searchParams.get('uuid') === '00000000-0000-4000-8000-000000000000' && UA.toLowerCase().includes('tunnel (https://github.com/' + 特征码字典[1] + '/edge');
 					const 请求TOKEN = url.searchParams.get('token');
-					const 用户客户端请求订阅 = 请求TOKEN === 订阅TOKEN;
+					const 自定义订阅TOKEN = String(env.SUB_PATH || env.SUBPATH || env.SUB_TOKEN || '').trim();
+					const 用户客户端请求订阅 = 请求TOKEN === 订阅TOKEN || (自定义订阅TOKEN && 请求TOKEN === 自定义订阅TOKEN);
 					const 当前日序号 = Math.floor(Date.now() / 86400000);
 					const 订阅转换后端TOKEN种子 = base64SecretEncode(订阅TOKEN, userID);
 					const [今日订阅转换后端专属TOKEN, 昨日订阅转换后端专属TOKEN] = await Promise.all([
